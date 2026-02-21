@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>FCC Fiber Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
+<style>
+:root {
+  --bg: #f4f3ef;
+  --surface: #ffffff;
+  --surface2: #f0efe9;
+  --border: #e0ddd5;
+  --border2: #ccc9be;
+  --ink: #1a1a18;
+  --ink2: #5a5a52;
+  --ink3: #9a9a90;
+  --accent: #1a5cff;
+  --accent-light: #e8eeff;
+  --green: #1a8a4a;
+  --amber: #d4820a;
+  --radius: 10px;
+  --drawer-h: 340px;
+  --header-h: 52px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; background: var(--bg); }
+body { font-family: 'Syne', sans-serif; color: var(--ink); display: flex; flex-direction: column; }
+
+/* HEADER */
+#header {
+  height: var(--header-h);
+  background: var(--ink);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  flex-shrink: 0;
+  z-index: 1000;
+}
+.logo { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: 0.5px; white-space: nowrap; }
+.logo em { color: #5b9fff; font-style: normal; }
+.header-stats { display: flex; gap: 16px; margin-left: auto; align-items: center; }
+.hstat { text-align: right; }
+.hstat-val { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 500; color: #5b9fff; line-height: 1; }
+.hstat-label { font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px; }
+
+/* MAP */
+#map-wrap { flex: 1; position: relative; overflow: hidden; }
+#map { width: 100%; height: 100%; }
+
+/* cluster overrides */
+.marker-cluster div { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; }
+
+/* fab */
+.map-fab { position: absolute; right: 12px; top: 12px; z-index: 800; display: flex; flex-direction: column; gap: 8px; }
+.fab-btn {
+  width: 42px; height: 42px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: background 0.12s;
+}
+.fab-btn:active { background: var(--surface2); }
+
+/* progress */
+#progress { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--border); z-index: 900; display: none; }
+#progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.2s; }
+#progress.show { display: block; }
+
+/* toast */
+#toast {
+  position: absolute; bottom: calc(var(--drawer-h) + 14px); left: 50%; transform: translateX(-50%);
+  background: rgba(26,26,24,0.92); color: #fff; font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 8px 16px; border-radius: 20px; white-space: nowrap;
+  z-index: 900; opacity: 0; transition: opacity 0.2s; pointer-events: none;
+  max-width: 88vw; overflow: hidden; text-overflow: ellipsis;
+  backdrop-filter: blur(4px);
+}
+#toast.show { opacity: 1; }
+
+/* DRAWER */
+#drawer {
+  height: var(--drawer-h);
+  background: var(--surface);
+  border-top: 1.5px solid var(--border);
+  display: flex; flex-direction: column;
+  flex-shrink: 0; z-index: 500;
+  transition: height 0.3s cubic-bezier(0.4,0,0.2,1);
+}
+#drawer.collapsed { height: 50px; }
+
+#drawer-handle {
+  height: 50px; min-height: 50px;
+  display: flex; align-items: center;
+  padding: 0 16px; gap: 0;
+  cursor: pointer; flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  user-select: none; position: relative;
+}
+.grip-bar {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  width: 34px; height: 4px; background: var(--border2); border-radius: 2px;
+}
+#drawer-tabs { display: flex; gap: 4px; margin-top: 4px; }
+.dtab {
+  padding: 6px 14px; font-size: 12px; font-weight: 600;
+  color: var(--ink3); border-radius: 7px; cursor: pointer;
+  transition: all 0.15s; white-space: nowrap;
+}
+.dtab.active { background: var(--accent-light); color: var(--accent); }
+.chevron { margin-left: auto; font-size: 14px; color: var(--ink3); transition: transform 0.3s; }
+#drawer.collapsed .chevron { transform: rotate(180deg); }
+
+#drawer-body { flex: 1; overflow: hidden; display: flex; min-height: 0; }
+.dpanel { display: none; flex: 1; overflow: hidden; min-height: 0; }
+.dpanel.active { display: flex; flex-direction: column; }
+
+/* PROVIDERS PANEL */
+.prov-toolbar {
+  padding: 10px 14px 8px; display: flex; gap: 8px; align-items: center;
+  flex-shrink: 0; border-bottom: 1px solid var(--border);
+}
+.search-box {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 7px; padding: 8px 10px; font-size: 13px;
+  font-family: 'Syne', sans-serif; color: var(--ink); outline: none;
+  -webkit-appearance: none; min-height: 38px;
+}
+.search-box:focus { border-color: var(--accent); }
+.search-box::placeholder { color: var(--ink3); }
+.pill-btn {
+  padding: 8px 13px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 7px; font-size: 11px; font-weight: 600; color: var(--ink2);
+  cursor: pointer; white-space: nowrap; font-family: 'Syne', sans-serif;
+  min-height: 38px; transition: all 0.12s;
+}
+.pill-btn:active { background: var(--border); }
+.pill-btn.accent { background: var(--accent-light); border-color: rgba(26,92,255,0.2); color: var(--accent); }
+
+#provider-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 6px 10px 12px; }
+#provider-list::-webkit-scrollbar { display: none; }
+
+.empty-msg { text-align: center; padding: 24px 16px; color: var(--ink3); font-size: 13px; line-height: 1.7; }
+.empty-msg .ico { font-size: 30px; margin-bottom: 8px; }
+
+.prov-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 10px; border-radius: 8px; cursor: pointer;
+  transition: background 0.1s; margin-bottom: 2px; min-height: 46px;
+}
+.prov-row:active { background: var(--surface2); }
+.prov-row.on { background: var(--accent-light); }
+.prov-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+.prov-name { font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prov-count { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink3); flex-shrink: 0; }
+
+/* DATA PANEL */
+#panel-data { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px; gap: 12px; }
+#panel-data::-webkit-scrollbar { display: none; }
+
+.card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; flex-shrink: 0;
+}
+.card-head {
+  padding: 10px 14px; display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.2px; }
+.card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+.drop-zone {
+  border: 2px dashed var(--border2); border-radius: 8px; padding: 20px 14px;
+  text-align: center; cursor: pointer; position: relative;
+  transition: all 0.2s; background: var(--surface);
+}
+.drop-zone.over { border-color: var(--accent); background: var(--accent-light); }
+.drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.dz-ico { font-size: 22px; margin-bottom: 5px; }
+.dz-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.dz-sub { font-size: 11px; color: var(--ink3); }
+
+.frow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fg { display: flex; flex-direction: column; gap: 4px; }
+.flabel { font-size: 10px; font-weight: 600; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.6px; }
+.finput, .fselect {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 9px 10px; font-size: 13px;
+  font-family: 'Syne', sans-serif; color: var(--ink); outline: none;
+  width: 100%; min-height: 44px; -webkit-appearance: none; appearance: none;
+}
+.finput:focus, .fselect:focus { border-color: var(--accent); }
+.finput::placeholder { color: var(--ink3); }
+.finput.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+.btn-primary {
+  background: var(--accent); color: #fff; border: none; border-radius: 8px;
+  padding: 13px 16px; font-size: 14px; font-weight: 700;
+  font-family: 'Syne', sans-serif; cursor: pointer; width: 100%;
+  min-height: 50px; transition: opacity 0.15s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-primary:active { opacity: 0.8; }
+
+.btn-sec {
+  background: var(--surface); color: var(--ink2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 11px 16px; font-size: 13px; font-weight: 600;
+  font-family: 'Syne', sans-serif; cursor: pointer; width: 100%;
+  min-height: 46px; transition: background 0.12s; text-decoration: none;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-sec:active { background: var(--surface2); }
+
+.info { border-radius: 7px; padding: 10px 12px; font-size: 11px; line-height: 1.7; }
+.info.blue { background: var(--accent-light); border: 1px solid rgba(26,92,255,0.2); color: #1a3a99; }
+.info.amber { background: #fff8ed; border: 1px solid #f0c070; color: #7a4a00; }
+
+.saved-note { font-size: 10px; color: var(--green); font-family: 'JetBrains Mono', monospace; display: none; margin-top: -4px; }
+.saved-note.show { display: block; }
+
+/* POPUP */
+.leaflet-popup-content-wrapper { border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.13); border: 1px solid var(--border); }
+.leaflet-popup-content { margin: 12px 14px !important; font-family: 'Syne', sans-serif; min-width: 180px; }
+.pu-name { font-size: 13px; font-weight: 700; margin-bottom: 7px; color: var(--ink); }
+.pu-row { font-size: 11px; display: flex; gap: 8px; margin-bottom: 3px; }
+.pu-k { color: var(--ink3); min-width: 68px; flex-shrink: 0; }
+.pu-v { font-family: 'JetBrains Mono', monospace; color: var(--ink); }
+
+/* OVERLAY */
+#overlay {
+  position: fixed; inset: 0; background: rgba(244,243,239,0.9);
+  display: none; flex-direction: column; align-items: center;
+  justify-content: center; z-index: 9999; gap: 14px; backdrop-filter: blur(3px);
+}
+#overlay.show { display: flex; }
+.spin { width: 34px; height: 34px; border: 3px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.overlay-msg { font-size: 12px; color: var(--ink2); font-family: 'JetBrains Mono', monospace; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="logo">FCC <em>FIBER</em> MAP</div>
+  <div class="header-stats">
+    <div class="hstat"><div class="hstat-val" id="s-loc">—</div><div class="hstat-label">Locations</div></div>
+    <div class="hstat"><div class="hstat-val" id="s-prv">—</div><div class="hstat-label">Providers</div></div>
+    <div class="hstat"><div class="hstat-val" id="s-vis">—</div><div class="hstat-label">Visible</div></div>
+  </div>
+</div>
+
+<div id="map-wrap">
+  <div id="progress"><div id="progress-bar"></div></div>
+  <div id="map"></div>
+  <div class="map-fab">
+    <button class="fab-btn" id="btn-locate" title="My Location">📍</button>
+    <button class="fab-btn" id="btn-fit" title="Fit to data">⊡</button>
+    <button class="fab-btn" id="btn-clear" title="Clear all">🗑</button>
+  </div>
+  <div id="toast"></div>
+</div>
+
+<div id="drawer">
+  <div id="drawer-handle">
+    <div class="grip-bar"></div>
+    <div id="drawer-tabs">
+      <div class="dtab active" data-panel="providers">📡 Providers</div>
+      <div class="dtab" data-panel="data">⬇ Data</div>
+    </div>
+    <div class="chevron">⌃</div>
+  </div>
+
+  <div id="drawer-body">
+
+    <!-- PROVIDERS -->
+    <div class="dpanel active" id="panel-providers">
+      <div class="prov-toolbar">
+        <input class="search-box" type="search" id="prov-search" placeholder="Search providers…" autocorrect="off" autocapitalize="none">
+        <button class="pill-btn accent" id="btn-all">All</button>
+        <button class="pill-btn" id="btn-none">None</button>
+      </div>
+      <div id="provider-list">
+        <div class="empty-msg"><div class="ico">📡</div>Load data from the <strong>Data</strong> tab</div>
+      </div>
+    </div>
+
+    <!-- DATA -->
+    <div class="dpanel" id="panel-data">
+
+      <div class="card">
+        <div class="card-head"><span>📂</span><span class="card-title">Upload FCC BDC CSV</span></div>
+        <div class="card-body">
+          <div class="drop-zone" id="drop-zone">
+            <input type="file" id="file-input" accept=".csv,.txt">
+            <div class="dz-ico">📄</div>
+            <div class="dz-title">Tap to choose file</div>
+            <div class="dz-sub">FCC Broadband Data Collection CSV</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span>🏛️</span><span class="card-title">FCC Direct Download</span></div>
+        <div class="card-body">
+          <div class="info blue">Enter your FCC credentials once — saved locally on this device. Select state + technology, then tap Download to open the CSV directly in Safari.</div>
+
+          <div class="fg">
+            <span class="flabel">FCC Username</span>
+            <input class="finput" type="text" id="fcc-user" placeholder="your FCC username" autocomplete="username" autocapitalize="none" autocorrect="off">
+          </div>
+
+          <div class="fg">
+            <span class="flabel">API Hash Token</span>
+            <input class="finput mono" type="password" id="fcc-tok" placeholder="your hex hash token" autocomplete="off">
+          </div>
+
+          <button class="btn-sec" id="btn-save-creds">💾 Save Credentials to Device</button>
+          <div class="saved-note" id="saved-note">✓ Saved to this device</div>
+
+          <div class="frow">
+            <div class="fg">
+              <span class="flabel">State</span>
+              <select class="fselect" id="dl-state">
+                <option value="">— State —</option>
+                <option>AL</option><option>AK</option><option>AZ</option><option>AR</option>
+                <option>CA</option><option>CO</option><option>CT</option><option>DE</option>
+                <option>DC</option><option>FL</option><option>GA</option><option>HI</option>
+                <option>ID</option><option>IL</option><option>IN</option><option>IA</option>
+                <option>KS</option><option>KY</option><option>LA</option><option>ME</option>
+                <option>MD</option><option>MA</option><option>MI</option><option>MN</option>
+                <option>MS</option><option>MO</option><option>MT</option><option>NE</option>
+                <option>NV</option><option>NH</option><option>NJ</option><option>NM</option>
+                <option>NY</option><option>NC</option><option>ND</option><option>OH</option>
+                <option>OK</option><option>OR</option><option>PA</option><option>RI</option>
+                <option>SC</option><option>SD</option><option>TN</option><option>TX</option>
+                <option>UT</option><option>VT</option><option>VA</option><option>WA</option>
+                <option>WV</option><option>WI</option><option>WY</option>
+                <option>AS</option><option>GU</option><option>MP</option><option>PR</option><option>VI</option>
+              </select>
+            </div>
+            <div class="fg">
+              <span class="flabel">Technology</span>
+              <select class="fselect" id="dl-tech">
+                <option value="50">Fiber (50)</option>
+                <option value="10">Cable (10)</option>
+                <option value="0">DSL (0)</option>
+                <option value="71">5G NR FWA (71)</option>
+                <option value="70">LTE FWA (70)</option>
+                <option value="60">Satellite (60)</option>
+                <option value="300">All Tech</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="fg">
+            <span class="flabel">Filing Period</span>
+            <select class="fselect" id="dl-period">
+              <option value="2024-12-31">December 2024 (Latest)</option>
+              <option value="2024-06-30">June 2024</option>
+              <option value="2023-12-31">December 2023</option>
+              <option value="2023-06-30">June 2023</option>
+            </select>
+          </div>
+
+          <button class="btn-primary" id="btn-download">⬇ Open FCC Download in Safari</button>
+
+          <div class="info amber">Safari will download the file. Come back here and upload it with the box above.</div>
+
+          <a href="https://broadbandmap.fcc.gov/data-download/fixed-broadband" target="_blank" class="btn-sec">🌐 Open FCC Download Page Manually</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span>⚡</span><span class="card-title">Demo Data</span></div>
+        <div class="card-body">
+          <button class="btn-sec" id="btn-demo">Load Demo — 10 Providers, 16 Cities</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="overlay"><div class="spin"></div><div class="overlay-msg" id="ov-msg">Loading…</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+<script>
+'use strict';
+
+const PALETTE = [
+  '#1a5cff','#e53935','#00897b','#f4511e','#8e24aa',
+  '#039be5','#43a047','#fb8c00','#d81b60','#6d4c41',
+  '#00acc1','#7cb342','#c0ca33','#3949ab','#5e35b1',
+  '#f06292','#26a69a','#ff7043','#29b6f6','#9ccc65',
+];
+const TECH = {'50':'Fiber to Premises','51':'Fiber to Curb','10':'Cable','11':'Cable HFC','0':'DSL','1':'ADSL','3':'VDSL','40':'Fixed Wireless','70':'LTE FWA','71':'5G NR FWA','60':'Satellite','62':'LEO Satellite'};
+const techLabel = c => TECH[String(c)] || (c ? `Tech ${c}` : '—');
+
+// MAP
+// SVG renderer (default) used — canvas conflicts with markerClusterGroup
+const map = L.map('map', { center: [39.5, -98.35], zoom: 4, zoomControl: false, tap: true });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OSM &copy; CARTO', subdomains: 'abcd', maxZoom: 19,
+}).addTo(map);
+L.control.zoom({ position: 'topleft' }).addTo(map);
+
+// STATE
+let allRows = [], providers = {}, visibleSet = new Set(), colorIdx = 0, searchQ = '';
+const nextColor = () => PALETTE[colorIdx++ % PALETTE.length];
+
+// DRAWER
+let drawerOpen = true;
+document.getElementById('drawer-handle').addEventListener('click', () => {
+  drawerOpen = !drawerOpen;
+  document.getElementById('drawer').classList.toggle('collapsed', !drawerOpen);
+});
+document.querySelectorAll('.dtab').forEach(tab => {
+  tab.addEventListener('click', e => {
+    e.stopPropagation();
+    document.querySelectorAll('.dtab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.dpanel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+    if (!drawerOpen) { drawerOpen = true; document.getElementById('drawer').classList.remove('collapsed'); }
+  });
+});
+
+// TOAST
+let toastT;
+function toast(msg, dur = 2800) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// PROGRESS
+function setProgress(pct, show = true) {
+  document.getElementById('progress').classList.toggle('show', show);
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+
+// OVERLAY
+function showOv(msg) { document.getElementById('ov-msg').textContent = msg; document.getElementById('overlay').classList.add('show'); }
+function hideOv() { document.getElementById('overlay').classList.remove('show'); }
+
+// STATS
+function updateStats() {
+  document.getElementById('s-loc').textContent = allRows.length.toLocaleString();
+  document.getElementById('s-prv').textContent = Object.keys(providers).length.toLocaleString();
+  let v = 0; allRows.forEach(r => { if (visibleSet.has(r._p)) v++; });
+  document.getElementById('s-vis').textContent = v.toLocaleString();
+}
+
+// CSV PARSE
+function parseCSVLine(line) {
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') q = !q;
+    else if (c === ',' && !q) { out.push(cur); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out;
+}
+
+function detectCols(hdr) {
+  // Exact match first, then partial — avoids false positives
+  const f = (...pats) => pats.reduce((found, p) => found ?? hdr.find(h => new RegExp(p,'i').test(h)), undefined);
+  return {
+    // FCC BDC uses 'latitude' / 'longitude' — also handles 'lat', 'lon', 'lng'
+    lat:  f('^latitude$', '^lat$', 'latitude', 'lat'),
+    lng:  f('^longitude$', '^lon$', '^lng$', 'longitude', 'lon'),
+    // FCC BDC uses 'brand_name' as the ISP name field
+    prov: f('^brand_name$', '^dba_name$', 'brand_name', 'dba_name', 'provider_name', 'brand', 'provider', 'operator'),
+    tech: f('^technology$', 'technology', 'tech_code', 'tech'),
+    addr: f('^address_primary$', 'address_primary', 'address', 'location_id'),
+    dl:   f('max_advertised_download_speed', 'max_advertised_download', 'download_speed', 'download'),
+    ul:   f('max_advertised_upload_speed', 'max_advertised_upload', 'upload_speed', 'upload'),
+  };
+}
+
+function parseCSVAsync(text, onPct) {
+  return new Promise((resolve, reject) => {
+    const lines = text.split(/\r?\n/);
+    if (lines.length < 2) { reject(new Error('No data rows found')); return; }
+
+    // Strip UTF-8 BOM if present (common in FCC CSV exports)
+    const rawHdr = parseCSVLine(lines[0].replace(/^\ufeff/, ''));
+    const hdr = rawHdr.map(h => h.trim().toLowerCase().replace(/["\s\r]/g,'').replace(/[^a-z0-9_]/g,'_'));
+    const cols = detectCols(hdr);
+
+    // Debug: log detected columns to console
+    console.log('CSV headers detected:', hdr);
+    console.log('Column mapping:', cols);
+
+    if (!cols.lat || !cols.lng) { reject(new Error(`Lat/lng columns not found.\nDetected: ${hdr.join(', ')}`)); return; }
+    if (!cols.prov) { reject(new Error(`Provider column not found.\nDetected: ${hdr.join(', ')}\nExpected: brand_name, dba_name, provider, frn`)); return; }
+
+    const iLat = hdr.indexOf(cols.lat), iLng = hdr.indexOf(cols.lng);
+    const iPrv = hdr.indexOf(cols.prov);
+    const iTech = cols.tech ? hdr.indexOf(cols.tech) : -1;
+    const iAddr = cols.addr ? hdr.indexOf(cols.addr) : -1;
+    const iDL = cols.dl ? hdr.indexOf(cols.dl) : -1;
+    const iUL = cols.ul ? hdr.indexOf(cols.ul) : -1;
+
+    const CHUNK = 10000;
+    const rows = [];
+    let i = 1, skipped = 0;
+
+    function next() {
+      const end = Math.min(i + CHUNK, lines.length);
+      for (; i < end; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const v = parseCSVLine(line);
+        const lat = parseFloat(v[iLat]), lng = parseFloat(v[iLng]);
+        if (isNaN(lat)||isNaN(lng)||lat<-90||lat>90||lng<-180||lng>180) { skipped++; continue; }
+        const prov = (v[iPrv] || 'Unknown').replace(/^"|"$/g,'').trim() || 'Unknown';
+        rows.push({
+          _lat: lat, _lng: lng, _p: prov,
+          _t: iTech >= 0 ? v[iTech] : '',
+          _a: iAddr >= 0 ? v[iAddr] : '',
+          _dl: iDL >= 0 ? v[iDL] : '',
+          _ul: iUL >= 0 ? v[iUL] : '',
+        });
+      }
+      onPct(i / lines.length);
+      if (i < lines.length) setTimeout(next, 0);
+      else resolve({ rows, skipped });
+    }
+    setTimeout(next, 0);
+  });
+}
+
+// MARKER CHUNKED ADD
+function addMarkersChunked(rows, onDone) {
+  const CHUNK = 4000;
+  let i = 0;
+
+  function next() {
+    const end = Math.min(i + CHUNK, rows.length);
+    for (; i < end; i++) {
+      const r = rows[i];
+      if (!providers[r._p]) {
+        const color = nextColor();
+        const clg = L.markerClusterGroup({
+          chunkedLoading: true,
+          maxClusterRadius: 45,
+          spiderfyOnMaxZoom: true,
+          showCoverageOnHover: false,
+          iconCreateFunction: cluster => {
+            const n = cluster.getChildCount();
+            const size = n < 100 ? 30 : n < 1000 ? 36 : 42;
+            return L.divIcon({
+              html: `<div style="width:${size}px;height:${size}px;background:${color};border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:${size < 36 ? 10 : 11}px;font-family:'JetBrains Mono',monospace;font-weight:500;border:2px solid rgba(255,255,255,0.7);box-shadow:0 2px 6px rgba(0,0,0,0.2);">${n > 999 ? Math.round(n/1000)+'k' : n}</div>`,
+              className: '',
+              iconSize: [size, size],
+              iconAnchor: [size/2, size/2],
+            });
+          },
+        });
+        providers[r._p] = { color, count: 0, layer: clg };
+        clg.addTo(map);
+        visibleSet.add(r._p);
+      }
+      providers[r._p].count++;
+      const color = providers[r._p].color;
+      // Note: no custom renderer — canvas conflicts with markerClusterGroup's layer management
+      const m = L.circleMarker([r._lat, r._lng], {
+        radius: 5, fill: true, fillColor: color, fillOpacity: 0.85,
+        color: 'rgba(255,255,255,0.6)', weight: 1.5,
+      });
+      m.bindPopup(() => buildPopup(r), { maxWidth: 240 });
+      providers[r._p].layer.addLayer(m);
+    }
+    setProgress(50 + (i / rows.length) * 50);
+    if (i < rows.length) setTimeout(next, 0);
+    else { setTimeout(() => setProgress(0, false), 800); onDone(); }
+  }
+  setTimeout(next, 0);
+}
+
+function buildPopup(r) {
+  return `<div class="pu-name">${r._p}</div>
+    ${r._t ? `<div class="pu-row"><span class="pu-k">Technology</span><span class="pu-v">${techLabel(r._t)}</span></div>` : ''}
+    ${r._a ? `<div class="pu-row"><span class="pu-k">Location</span><span class="pu-v">${r._a}</span></div>` : ''}
+    <div class="pu-row"><span class="pu-k">Coords</span><span class="pu-v">${r._lat.toFixed(5)}, ${r._lng.toFixed(5)}</span></div>
+    ${r._dl ? `<div class="pu-row"><span class="pu-k">Speed</span><span class="pu-v">${r._dl} / ${r._ul} Mbps</span></div>` : ''}`;
+}
+
+// LOAD CSV
+async function loadCSV(text, name) {
+  showOv('Parsing CSV…');
+  setProgress(0, true);
+  try {
+    const { rows, skipped } = await parseCSVAsync(text, pct => {
+      setProgress(pct * 50);
+      document.getElementById('ov-msg').textContent = `Parsing… ${Math.round(pct * 100)}%`;
+    });
+    if (!rows.length) { hideOv(); toast('⚠ No valid rows found'); return; }
+    allRows = allRows.concat(rows);
+    document.getElementById('ov-msg').textContent = `Plotting ${rows.length.toLocaleString()} points…`;
+    addMarkersChunked(rows, () => {
+      renderProviders();
+      updateStats();
+      hideOv();
+      toast(`✓ ${rows.length.toLocaleString()} locations from ${name}${skipped ? ` (${skipped} skipped)` : ''}`);
+      fitAll();
+      document.querySelector('.dtab[data-panel="providers"]').click();
+    });
+  } catch(err) {
+    hideOv(); setProgress(0, false);
+    alert(err.message);
+  }
+}
+
+// PROVIDER LIST
+function renderProviders() {
+  const list = document.getElementById('provider-list');
+  const names = Object.keys(providers)
+    .filter(n => !searchQ || n.toLowerCase().includes(searchQ))
+    .sort((a, b) => providers[b].count - providers[a].count);
+
+  if (!names.length) {
+    list.innerHTML = `<div class="empty-msg"><div class="ico">${allRows.length ? '🔍' : '📡'}</div>${allRows.length ? 'No match' : 'Load data from the <strong>Data</strong> tab'}</div>`;
+    return;
+  }
+
+  const e = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  list.innerHTML = names.map(n => {
+    const p = providers[n], on = visibleSet.has(n);
+    return `<div class="prov-row${on?' on':''}" data-n="${e(n)}">
+      <div class="prov-swatch" style="background:${p.color};opacity:${on?1:0.25}"></div>
+      <div class="prov-name" style="opacity:${on?1:0.4}">${e(n)}</div>
+      <div class="prov-count">${p.count.toLocaleString()}</div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('provider-list').addEventListener('click', e => {
+  const row = e.target.closest('.prov-row'); if (!row) return;
+  const n = row.dataset.n;
+  if (visibleSet.has(n)) { visibleSet.delete(n); providers[n].layer.remove(); }
+  else { visibleSet.add(n); providers[n].layer.addTo(map); }
+  renderProviders(); updateStats();
+});
+
+document.getElementById('btn-all').addEventListener('click', () => {
+  Object.keys(providers).filter(n => !searchQ || n.toLowerCase().includes(searchQ))
+    .forEach(n => { visibleSet.add(n); providers[n].layer.addTo(map); });
+  renderProviders(); updateStats();
+});
+document.getElementById('btn-none').addEventListener('click', () => {
+  Object.keys(providers).filter(n => !searchQ || n.toLowerCase().includes(searchQ))
+    .forEach(n => { visibleSet.delete(n); providers[n].layer.remove(); });
+  renderProviders(); updateStats();
+});
+document.getElementById('prov-search').addEventListener('input', e => {
+  searchQ = e.target.value.toLowerCase(); renderProviders();
+});
+
+// FABs
+function fitAll() {
+  const pts = allRows.filter(r => visibleSet.has(r._p)).map(r => [r._lat, r._lng]);
+  if (!pts.length) return;
+  const b = L.latLngBounds(pts);
+  if (b.isValid()) map.fitBounds(b, { padding: [48, 48] });
+}
+document.getElementById('btn-fit').addEventListener('click', fitAll);
+document.getElementById('btn-locate').addEventListener('click', () => {
+  map.locate({ setView: true, maxZoom: 13 });
+  map.once('locationerror', () => toast('⚠ Location unavailable'));
+});
+document.getElementById('btn-clear').addEventListener('click', () => {
+  if (!allRows.length) return;
+  if (!confirm('Clear all map data?')) return;
+  Object.values(providers).forEach(p => p.layer.remove());
+  providers = {}; allRows = []; visibleSet = new Set(); colorIdx = 0;
+  renderProviders(); updateStats();
+  ['s-loc','s-prv','s-vis'].forEach(id => document.getElementById(id).textContent = '—');
+  toast('Map cleared');
+});
+
+// FILE UPLOAD
+document.getElementById('file-input').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => loadCSV(ev.target.result, f.name);
+  r.readAsText(f); e.target.value = '';
+});
+const dz = document.getElementById('drop-zone');
+['dragover','dragenter'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('over'); }));
+['dragleave','dragend','drop'].forEach(ev => dz.addEventListener(ev, () => dz.classList.remove('over')));
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f) { const r = new FileReader(); r.onload = ev => loadCSV(ev.target.result, f.name); r.readAsText(f); }
+});
+
+// CREDENTIALS
+function loadCreds() {
+  try {
+    const u = localStorage.getItem('fcc_u') || '', t = localStorage.getItem('fcc_t') || '';
+    if (u) document.getElementById('fcc-user').value = u;
+    if (t) document.getElementById('fcc-tok').value = t;
+    if (u && t) document.getElementById('saved-note').classList.add('show');
+  } catch(e) {}
+}
+
+document.getElementById('btn-save-creds').addEventListener('click', () => {
+  const u = document.getElementById('fcc-user').value.trim();
+  const t = document.getElementById('fcc-tok').value.trim();
+  if (!u || !t) { toast('⚠ Enter username and token first'); return; }
+  try {
+    localStorage.setItem('fcc_u', u);
+    localStorage.setItem('fcc_t', t);
+    document.getElementById('saved-note').classList.add('show');
+    toast('✓ Credentials saved to this device');
+  } catch(e) { toast('⚠ Storage unavailable — enter each session'); }
+});
+
+// FCC DOWNLOAD
+document.getElementById('btn-download').addEventListener('click', () => {
+  const u = document.getElementById('fcc-user').value.trim();
+  const t = document.getElementById('fcc-tok').value.trim();
+  const state = document.getElementById('dl-state').value;
+  const tech = document.getElementById('dl-tech').value;
+  const period = document.getElementById('dl-period').value;
+
+  if (!u || !t) { toast('⚠ Enter your FCC credentials first'); return; }
+  if (!state) { toast('⚠ Select a state'); return; }
+
+  const url = new URL('https://broadbandmap.fcc.gov/api/public/map/downloads/fixed_availability');
+  url.searchParams.set('username', u);
+  url.searchParams.set('hash_value', t);
+  url.searchParams.set('state_abbr', state);
+  url.searchParams.set('technology_code', tech);
+  url.searchParams.set('filing_type', 'A');
+  url.searchParams.set('data_type', 'availability');
+  url.searchParams.set('category', 'fixed_broadband');
+  url.searchParams.set('as_of_date', period);
+
+  window.open(url.toString(), '_blank');
+  toast(`⬇ Opening ${state} · tech ${tech} download…`, 4000);
+});
+
+// DEMO
+document.getElementById('btn-demo').addEventListener('click', () => {
+  const provs = [
+    ['AT&T Fiber','50',1000,1000],['Comcast Xfinity','10',1200,35],
+    ['Verizon Fios','50',1000,1000],['Charter Spectrum','10',1000,35],
+    ['Cox Communications','10',1000,35],['Lumen Technologies','50',1000,1000],
+    ['Frontier Fiber','50',2000,2000],['Windstream Kinetic','50',1000,1000],
+    ['Google Fiber','50',2000,2000],['Consolidated Comm.','50',1000,1000],
+  ];
+  const metros = [
+    [40.7128,-74.006,'New York NY'],[34.0522,-118.2437,'Los Angeles CA'],
+    [41.8781,-87.6298,'Chicago IL'],[29.7604,-95.3698,'Houston TX'],
+    [33.4484,-112.074,'Phoenix AZ'],[39.9526,-75.1652,'Philadelphia PA'],
+    [30.2672,-97.7431,'Austin TX'],[32.7767,-96.797,'Dallas TX'],
+    [37.7749,-122.4194,'San Francisco CA'],[47.6062,-122.3321,'Seattle WA'],
+    [42.3601,-71.0589,'Boston MA'],[36.1745,-115.1372,'Las Vegas NV'],
+    [25.7617,-80.1918,'Miami FL'],[45.5051,-122.675,'Portland OR'],
+    [39.7392,-104.9903,'Denver CO'],[35.2271,-80.8431,'Charlotte NC'],
+  ];
+  const lines = ['brand_name,latitude,longitude,technology,max_advertised_download_speed,max_advertised_upload_speed,location_id'];
+  let id = 10000;
+  provs.forEach(([name, tech, dl, ul], pi) => {
+    metros.forEach(([lat, lng, city], mi) => {
+      if ((mi + pi) % 4 === 0) return;
+      const n = 20 + Math.floor(Math.random() * 60);
+      for (let i = 0; i < n; i++) {
+        const dlat = (lat + (Math.random()-0.5)*0.09).toFixed(6);
+        const dlng = (lng + (Math.random()-0.5)*0.09).toFixed(6);
+        lines.push(`${name},${dlat},${dlng},${tech},${dl},${ul},FAB${id++}`);
+      }
+    });
+  });
+  loadCSV(lines.join('\n'), 'Demo Data');
+});
+
+loadCreds();
+</script>
+</body>
+</html>

@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FCC Fiber Map · Provider Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+:root {
+  --bg: #090b0f;
+  --panel: #0f1218;
+  --panel2: #13171f;
+  --border: #1c2130;
+  --accent: #00e5ff;
+  --accent2: #ff6b35;
+  --accent3: #a78bfa;
+  --text: #dde1ec;
+  --muted: #4a5470;
+  --success: #00d68f;
+  --warn: #ffcc00;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  z-index: 1000;
+}
+.logo {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 21px;
+  letter-spacing: 2.5px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.logo span { color: var(--accent2); }
+.vsep { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
+.tagline {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+.header-stats { margin-left: auto; display: flex; gap: 18px; align-items: center; }
+.stat { text-align: right; line-height: 1; }
+.stat-val { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; color: var(--accent); }
+.stat-val.orange { color: var(--accent2); }
+.stat-label { font-size: 9px; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; margin-top: 2px; }
+
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  flex-shrink: 0;
+}
+.tab-btn {
+  flex: 1;
+  padding: 10px 4px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  position: relative;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-badge {
+  position: absolute;
+  top: 5px; right: 6px;
+  background: var(--accent2);
+  color: #000;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+
+.app { display: flex; flex: 1; overflow: hidden; }
+.sidebar {
+  width: 310px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.tab-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+.tab-panel.active { display: flex; }
+
+/* IMPORT TAB */
+.import-scroll { overflow-y: auto; flex: 1; padding-bottom: 10px; }
+.import-scroll::-webkit-scrollbar { width: 3px; }
+.import-scroll::-webkit-scrollbar-thumb { background: var(--border); }
+
+.upload-zone {
+  margin: 14px;
+  border: 1.5px dashed var(--border);
+  border-radius: 8px;
+  padding: 18px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(0,229,255,0.015);
+  position: relative;
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(0,229,255,0.05);
+}
+.upload-zone input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.upload-icon { font-size: 26px; margin-bottom: 7px; display: block; }
+.upload-title { font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+.upload-sub { font-size: 10px; color: var(--muted); line-height: 1.6; }
+.upload-sub code { font-family: 'DM Mono', monospace; color: var(--accent); font-size: 9px; }
+
+.fcc-dl-box {
+  margin: 0 14px 14px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.fcc-dl-header {
+  background: rgba(0,229,255,0.07);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.fcc-dl-title { font-size: 11px; font-weight: 600; color: var(--accent); }
+.fcc-dl-body { padding: 10px 12px; font-size: 10px; color: var(--muted); line-height: 1.7; }
+.fcc-dl-body strong { color: var(--text); font-weight: 500; }
+.fcc-dl-steps { margin: 8px 0; padding-left: 0; list-style: none; }
+.fcc-dl-steps li { display: flex; gap: 7px; align-items: flex-start; margin-bottom: 5px; }
+.step-num {
+  background: var(--accent);
+  color: #000;
+  font-size: 8px;
+  font-weight: 700;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.fcc-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  background: rgba(0,229,255,0.08);
+  border: 1px solid rgba(0,229,255,0.2);
+  border-radius: 5px;
+  padding: 7px 10px;
+  text-decoration: none;
+  color: var(--accent);
+  font-size: 10px;
+  font-family: 'DM Mono', monospace;
+  transition: all 0.2s;
+}
+.fcc-link:hover { background: rgba(0,229,255,0.15); }
+.fcc-link-arrow { margin-left: auto; }
+
+.action-btn {
+  margin: 0 14px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  width: calc(100% - 28px);
+  transition: all 0.2s;
+  font-family: 'DM Sans', sans-serif;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  justify-content: center;
+}
+.action-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+.action-btn.primary { border-color: rgba(0,229,255,0.3); color: var(--accent); }
+.action-btn.primary:hover { background: rgba(0,229,255,0.08); }
+
+/* FCC LIVE TAB */
+.query-panel { padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex: 1; }
+.query-panel::-webkit-scrollbar { width: 3px; }
+.query-panel::-webkit-scrollbar-thumb { background: var(--border); }
+
+.field-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 5px;
+  display: block;
+}
+.field-group { margin-bottom: 0; }
+.field-input, .field-select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 11px;
+  font-family: 'DM Sans', sans-serif;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.field-input:focus, .field-select:focus { border-color: var(--accent); }
+.field-input::placeholder { color: var(--muted); }
+.field-select option { background: var(--panel2); }
+.range-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.query-note {
+  background: rgba(255,204,0,0.06);
+  border: 1px solid rgba(255,204,0,0.2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 10px;
+  color: var(--warn);
+  line-height: 1.6;
+}
+.query-note strong { display: block; margin-bottom: 2px; font-size: 11px; }
+
+.cors-note {
+  background: rgba(255,107,53,0.06);
+  border: 1px solid rgba(255,107,53,0.25);
+  border-radius: 6px;
+  padding: 9px 11px;
+  font-size: 10px;
+  color: #ff9f7a;
+  line-height: 1.7;
+}
+.cors-note strong { display: block; margin-bottom: 3px; color: var(--accent2); font-size: 11px; }
+.cors-note a { color: var(--accent); text-decoration: none; }
+.cors-note a:hover { text-decoration: underline; }
+
+.run-query-btn {
+  background: rgba(0,229,255,0.1);
+  border: 1px solid rgba(0,229,255,0.35);
+  color: var(--accent);
+  padding: 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.run-query-btn:hover { background: rgba(0,229,255,0.18); }
+.run-query-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.query-result-box {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.8;
+  font-family: 'DM Mono', monospace;
+  min-height: 60px;
+  max-height: 160px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+.query-result-box::-webkit-scrollbar { width: 3px; }
+.query-result-box::-webkit-scrollbar-thumb { background: var(--border); }
+.qr-ok { color: var(--success); }
+.qr-warn { color: var(--warn); }
+.qr-err { color: var(--accent2); }
+
+/* PROVIDERS TAB */
+.providers-panel { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.prov-controls { padding: 12px 14px 8px; flex-shrink: 0; }
+.search-wrap { position: relative; margin-bottom: 8px; }
+.search-wrap input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 7px 10px 7px 30px;
+  color: var(--text);
+  font-size: 11px;
+  font-family: 'DM Sans', sans-serif;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.search-wrap input:focus { border-color: var(--accent); }
+.search-wrap input::placeholder { color: var(--muted); }
+.search-icon { position: absolute; left: 9px; top: 8px; color: var(--muted); font-size: 12px; pointer-events: none; }
+.ctrl-row { display: flex; gap: 6px; }
+.ctrl-btn {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 5px 4px;
+  border-radius: 4px;
+  font-size: 9px;
+  cursor: pointer;
+  font-family: 'DM Mono', monospace;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ctrl-btn.danger:hover { border-color: #ff4e6a; color: #ff4e6a; }
+
+.provider-list-wrap { flex: 1; overflow-y: auto; padding: 6px 14px 14px; }
+.provider-list-wrap::-webkit-scrollbar { width: 3px; }
+.provider-list-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.empty-state { text-align: center; padding: 28px 14px; color: var(--muted); font-size: 11px; }
+.empty-state .icon { font-size: 28px; margin-bottom: 7px; }
+
+.provider-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.12s;
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+}
+.provider-item:hover { background: rgba(255,255,255,0.03); }
+.provider-item.active { background: rgba(0,229,255,0.06); border-color: rgba(0,229,255,0.18); }
+.provider-item.selected-solo { background: rgba(0,214,143,0.08); border-color: rgba(0,214,143,0.25); }
+.prov-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.prov-name { font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prov-count { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); flex-shrink: 0; }
+
+/* MAP */
+#map { flex: 1; background: #0d1117; }
+.map-wrap { position: relative; flex: 1; display: flex; flex-direction: column; }
+
+.map-legend {
+  position: absolute;
+  bottom: 36px; right: 12px;
+  z-index: 900;
+  background: rgba(15,18,24,0.93);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 10px;
+  max-width: 200px;
+  max-height: 220px;
+  overflow-y: auto;
+  display: none;
+  backdrop-filter: blur(6px);
+}
+.map-legend.visible { display: block; }
+.map-legend::-webkit-scrollbar { width: 3px; }
+.map-legend::-webkit-scrollbar-thumb { background: var(--border); }
+.legend-title { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; margin-bottom: 7px; }
+.legend-item { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 10px; }
+.legend-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+.statusbar {
+  height: 26px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 14px;
+  flex-shrink: 0;
+  z-index: 1000;
+}
+.status-item { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.status-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.status-dot.active { background: var(--success); box-shadow: 0 0 5px var(--success); }
+.status-dot.warn { background: var(--warn); box-shadow: 0 0 4px var(--warn); }
+
+.loading-overlay {
+  position: fixed; inset: 0;
+  background: rgba(9,11,15,0.82);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  flex-direction: column;
+  gap: 14px;
+}
+.loading-overlay.show { display: flex; }
+.spinner { width: 32px; height: 32px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+.loading-msg { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.progress-bar-wrap { height: 2px; background: var(--border); overflow: hidden; display: none; }
+.progress-bar-wrap.show { display: block; }
+.progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s ease; }
+
+.leaflet-popup-content-wrapper {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+  color: var(--text);
+}
+.leaflet-popup-tip { background: var(--panel2); }
+.leaflet-popup-content { margin: 12px 14px; }
+.popup-title { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent); margin-bottom: 7px; letter-spacing: 0.3px; font-weight: 500; }
+.popup-row { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+.popup-row span { color: var(--text); }
+.popup-src { font-size: 9px; color: var(--accent3); margin-top: 5px; font-family: 'DM Mono', monospace; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">FCC <span>FIBER</span> MAP</div>
+  <div class="vsep"></div>
+  <div class="tagline">BDC · Broadband Fabric · Provider Explorer</div>
+  <div class="header-stats">
+    <div class="stat"><div class="stat-val" id="total-locations">—</div><div class="stat-label">Locations</div></div>
+    <div class="stat"><div class="stat-val orange" id="total-providers">—</div><div class="stat-label">Providers</div></div>
+    <div class="stat"><div class="stat-val" id="visible-count">—</div><div class="stat-label">Visible</div></div>
+  </div>
+</header>
+
+<div class="progress-bar-wrap" id="progress-wrap">
+  <div class="progress-bar" id="progress-bar"></div>
+</div>
+
+<div class="app">
+  <div class="sidebar">
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="import">📂 Import</button>
+      <button class="tab-btn" data-tab="fetch">🌐 FCC Live<span class="tab-badge">API</span></button>
+      <button class="tab-btn" data-tab="providers">📡 Providers</button>
+    </div>
+
+    <!-- IMPORT TAB -->
+    <div class="tab-panel active" id="tab-import">
+      <div class="import-scroll">
+        <div class="upload-zone" id="upload-zone">
+          <input type="file" id="file-input" accept=".csv,.txt">
+          <span class="upload-icon">📂</span>
+          <div class="upload-title">Drop FCC BDC CSV Here</div>
+          <div class="upload-sub">
+            Auto-detects FCC Broadband Data Collection columns:<br>
+            <code>latitude, longitude, brand_name, technology</code><br>
+            <code>max_advertised_download_speed</code> + more
+          </div>
+        </div>
+
+        <div class="fcc-dl-box">
+          <div class="fcc-dl-header">
+            <span>🏛️</span>
+            <span class="fcc-dl-title">Get Official FCC BDC Data (Free)</span>
+          </div>
+          <div class="fcc-dl-body">
+            The FCC publishes <strong>state-level CSVs</strong> by technology, updated twice yearly (latest: <strong>Dec 2024</strong>).
+            <ol class="fcc-dl-steps">
+              <li><span class="step-num">1</span><span>Open the FCC Data Download page below</span></li>
+              <li><span class="step-num">2</span><span>Select <strong>Filing Period</strong> → <strong>December 2024</strong></span></li>
+              <li><span class="step-num">3</span><span>Choose <strong>State</strong> and <strong>Technology</strong> (e.g. Fiber to the Premises = tech 50)</span></li>
+              <li><span class="step-num">4</span><span>Download the CSV and drag it into the upload zone above</span></li>
+            </ol>
+            <a class="fcc-link" href="https://broadbandmap.fcc.gov/data-download/fixed-broadband" target="_blank" rel="noopener">
+              🔗 broadbandmap.fcc.gov/data-download/fixed-broadband
+              <span class="fcc-link-arrow">↗</span>
+            </a>
+          </div>
+        </div>
+
+        <button class="action-btn primary" id="sample-btn">⚡ Load Demo Data (10 Providers, 16 Cities)</button>
+        <button class="action-btn" id="clear-btn">🗑 Clear All Map Data</button>
+
+        <div style="margin:0 14px;padding:10px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;font-size:9px;color:var(--muted);font-family:'DM Mono',monospace;line-height:1.8;">
+          <strong style="color:var(--text);display:block;margin-bottom:4px;">FCC BDC CSV Field Reference</strong>
+          frn · brand_name · technology<br>
+          latitude · longitude<br>
+          state_abbr · block_geoid<br>
+          max_advertised_download_speed<br>
+          max_advertised_upload_speed<br>
+          low_latency · business_residential_code
+        </div>
+      </div>
+    </div>
+
+    <!-- FCC LIVE TAB -->
+    <div class="tab-panel" id="tab-fetch">
+      <div class="query-panel">
+
+        <div class="cors-note">
+          <strong>⚠️ Browser CORS Limitation</strong>
+          The FCC broadbandmap.fcc.gov API blocks direct browser requests (CORS policy). This tab geocodes addresses and attempts the query — on CORS block it shows exactly what the API would return and provides workaround options. For bulk data, use the <strong>Import tab</strong>.
+        </div>
+
+        <div class="query-note">
+          <strong>💡 How it works</strong>
+          Enter an address → geocoded via OpenStreetMap Nominatim → queried against the FCC BDC API. Results are added as map markers.
+        </div>
+
+        <div class="field-group">
+          <span class="field-label">Query Mode</span>
+          <select class="field-select" id="query-mode">
+            <option value="address">🏠 Address Lookup</option>
+            <option value="latlng">📍 Lat / Lng Direct</option>
+          </select>
+        </div>
+
+        <div id="address-fields">
+          <div class="field-group">
+            <span class="field-label">Street Address</span>
+            <input class="field-input" type="text" id="q-address" placeholder="445 12th St SW, Washington DC">
+          </div>
+        </div>
+
+        <div id="latlng-fields" style="display:none;">
+          <div class="range-row">
+            <div class="field-group">
+              <span class="field-label">Latitude</span>
+              <input class="field-input" type="number" id="q-lat" placeholder="38.897" step="0.0001">
+            </div>
+            <div class="field-group">
+              <span class="field-label">Longitude</span>
+              <input class="field-input" type="number" id="q-lng" placeholder="-77.036" step="0.0001">
+            </div>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <span class="field-label">Technology Filter</span>
+          <select class="field-select" id="q-tech">
+            <option value="">All Technologies</option>
+            <option value="50">50 — Fiber to the Premises</option>
+            <option value="51">51 — Fiber to the Curb</option>
+            <option value="10">10 — Cable (DOCSIS 3.1)</option>
+            <option value="11">11 — Cable HFC</option>
+            <option value="0">0 — DSL</option>
+            <option value="70">70 — LTE Fixed Wireless</option>
+            <option value="71">71 — 5G NR Fixed Wireless</option>
+            <option value="60">60 — Satellite</option>
+          </select>
+        </div>
+
+        <button class="run-query-btn" id="run-query-btn">🔍 Geocode &amp; Query FCC API</button>
+
+        <div>
+          <span class="field-label">Response Log</span>
+          <div class="query-result-box" id="query-result">Waiting for query…</div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:10px;">
+          <span class="field-label">Batch — One Address Per Line</span>
+          <textarea class="field-input" id="batch-addresses" placeholder="123 Main St, Dallas TX&#10;456 Oak Ave, Austin TX&#10;789 Pine Rd, Houston TX" rows="4" style="resize:vertical;margin-bottom:8px;"></textarea>
+          <button class="run-query-btn" id="run-batch-btn" style="background:rgba(167,139,250,0.1);border-color:rgba(167,139,250,0.3);color:var(--accent3);">
+            ⚡ Batch Geocode + Query All
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROVIDERS TAB -->
+    <div class="tab-panel" id="tab-providers">
+      <div class="providers-panel">
+        <div class="prov-controls">
+          <div class="search-wrap">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="search-input" placeholder="Filter providers…">
+          </div>
+          <div class="ctrl-row">
+            <button class="ctrl-btn" id="select-all-btn">All On</button>
+            <button class="ctrl-btn" id="deselect-all-btn">All Off</button>
+            <button class="ctrl-btn" id="solo-btn">Solo</button>
+            <button class="ctrl-btn danger" id="remove-prov-btn">Remove</button>
+          </div>
+        </div>
+        <div class="provider-list-wrap" id="provider-list">
+          <div class="empty-state"><div class="icon">📡</div>Load data to see providers</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="map-legend" id="map-legend">
+      <div class="legend-title">Active Providers</div>
+      <div id="legend-items"></div>
+    </div>
+  </div>
+</div>
+
+<div class="statusbar">
+  <div class="status-item">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">Ready — import FCC CSV or use Live API tab</span>
+  </div>
+  <div class="status-item" style="margin-left:auto;">
+    FCC BDC Dec 2024 · broadbandmap.fcc.gov
+  </div>
+</div>
+
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-msg" id="loading-msg">Processing…</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ── MAP INIT ──────────────────────────────────────────────────────────────────
+const map = L.map('map', { center: [39.5, -98.35], zoom: 4, zoomControl: true, preferCanvas: true });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OSM &copy; CARTO',
+  subdomains: 'abcd', maxZoom: 19
+}).addTo(map);
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let allData = [], providers = {}, selectedProviders = new Set(), layerGroups = {};
+let activeProvider = null, searchQuery = '';
+
+const PALETTE = [
+  '#00e5ff','#ff6b35','#00d68f','#ffcc00','#ff4081','#a78bfa','#4fc3f7',
+  '#aed581','#ff8a65','#f48fb1','#80cbc4','#ffe082','#ce93d8','#80deea',
+  '#90caf9','#a5d6a7','#ffab91','#ef9a9a','#00b0ff','#69f0ae','#ff6e40',
+];
+let colorIdx = 0;
+const nextColor = () => PALETTE[colorIdx++ % PALETTE.length];
+
+const TECH_NAMES = {
+  '50':'Fiber to Premises','51':'Fiber to Curb','10':'Cable (DOCSIS)','11':'Cable HFC',
+  '12':'Cable Other','0':'DSL (ADSL2+)','1':'ADSL','2':'SDSL','3':'VDSL',
+  '40':'Fixed Wireless','41':'Unlicensed FWA','70':'LTE Fixed Wireless',
+  '71':'5G NR Fixed Wireless','72':'Other FWA','60':'Satellite','61':'GEO Sat','62':'LEO Sat',
+};
+const techName = c => TECH_NAMES[String(c)] || (c ? `Tech ${c}` : 'Unknown');
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + tab).classList.add('active');
+  });
+});
+
+// ── CSV PARSING ───────────────────────────────────────────────────────────────
+function parseCSVLine(line) {
+  const result = []; let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur); cur = ''; }
+    else cur += c;
+  }
+  result.push(cur);
+  return result;
+}
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return null;
+  const header = parseCSVLine(lines[0]).map(h =>
+    h.trim().toLowerCase().replace(/["\s]/g,'').replace(/[^a-z0-9_]/g,'_')
+  );
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = parseCSVLine(lines[i]);
+    const obj = {};
+    header.forEach((h, idx) => obj[h] = (vals[idx] || '').replace(/^"|"$/g,'').trim());
+    rows.push(obj);
+  }
+  return { header, rows };
+}
+function detectCols(header) {
+  const find = (...pats) => pats.reduce((f, p) => f || header.find(h => new RegExp(p,'i').test(h)), null);
+  return {
+    latCol:  find('^lat(itude)?$','lat'),
+    lngCol:  find('^lon(gitude)?$','^lng$','lon','lng'),
+    provCol: find('^brand_name$','^dba_name$','brand','dba','provider_?name','operator','^frn$','provider'),
+    techCol: find('^technology$','tech'),
+    addrCol: find('address','location_?name','street'),
+    speedDL: find('max_advertised_download','download_?speed','dl_?speed'),
+    speedUL: find('max_advertised_upload','upload_?speed','ul_?speed'),
+    state:   find('^state','^st_abbr'),
+  };
+}
+
+// ── LOAD DATA ─────────────────────────────────────────────────────────────────
+function loadData(text, source) {
+  showLoading(true, 'Parsing CSV…');
+  setTimeout(() => {
+    try {
+      const parsed = parseCSV(text);
+      if (!parsed || !parsed.rows.length) { alert('No rows found.'); showLoading(false); return; }
+      const cols = detectCols(parsed.header);
+      if (!cols.latCol || !cols.lngCol) {
+        alert(`Could not find lat/lng columns.\nDetected: ${parsed.header.join(', ')}`);
+        showLoading(false); return;
+      }
+      if (!cols.provCol) {
+        alert(`Could not find provider column.\nDetected: ${parsed.header.join(', ')}\nExpected: brand_name, dba_name, provider, etc.`);
+        showLoading(false); return;
+      }
+
+      let skipped = 0, added = 0;
+      parsed.rows.forEach(row => {
+        const lat = parseFloat(row[cols.latCol]);
+        const lng = parseFloat(row[cols.lngCol]);
+        if (isNaN(lat)||isNaN(lng)||lat<-90||lat>90||lng<-180||lng>180) { skipped++; return; }
+        const prov = row[cols.provCol] || 'Unknown';
+        row._lat = lat; row._lng = lng; row._provider = prov;
+        row._tech = cols.techCol ? row[cols.techCol] : '';
+        row._addr = cols.addrCol ? row[cols.addrCol] : '';
+        row._dl   = cols.speedDL ? row[cols.speedDL] : '';
+        row._ul   = cols.speedUL ? row[cols.speedUL] : '';
+        row._source = source;
+        allData.push(row);
+        if (!providers[prov]) providers[prov] = { color: nextColor(), count: 0 };
+        providers[prov].count++;
+        selectedProviders.add(prov);
+        added++;
+      });
+
+      renderMarkers();
+      renderProviderList();
+      updateStats();
+      updateStatus(`Loaded ${added.toLocaleString()} locations · ${Object.keys(providers).length} providers${skipped ? ` · ${skipped} skipped` : ''}`, 'active');
+
+      if (added > 0) {
+        const pts = allData.slice(-added).map(d => [d._lat, d._lng]);
+        const bounds = L.latLngBounds(pts);
+        if (bounds.isValid()) map.fitBounds(bounds, { padding: [40,40] });
+      }
+      document.querySelector('[data-tab="providers"]').click();
+    } catch(e) { console.error(e); alert('Parse error: ' + e.message); }
+    showLoading(false);
+  }, 30);
+}
+
+function addPointToMap(lat, lng, prov, tech, addr, extra={}) {
+  const row = { _lat:lat, _lng:lng, _provider:prov, _tech:tech, _addr:addr, ...extra };
+  allData.push(row);
+  if (!providers[prov]) {
+    providers[prov] = { color: nextColor(), count: 0 };
+    layerGroups[prov] = L.layerGroup().addTo(map);
+    selectedProviders.add(prov);
+  }
+  providers[prov].count++;
+
+  const color = providers[prov].color;
+  const m = L.circleMarker([lat,lng], { radius:6, fillColor:color, color:'rgba(0,0,0,0.3)', weight:1, fillOpacity:0.85 });
+  m.bindPopup(buildPopup(row));
+  if (layerGroups[prov]) layerGroups[prov].addLayer(m);
+
+  updateStats();
+  updateVisibleCount();
+  renderProviderList();
+  updateLegend();
+}
+
+// ── MARKERS ───────────────────────────────────────────────────────────────────
+function renderMarkers() {
+  Object.values(layerGroups).forEach(lg => lg.remove());
+  layerGroups = {};
+  Object.keys(providers).forEach(name => {
+    layerGroups[name] = L.layerGroup();
+    if (selectedProviders.has(name)) layerGroups[name].addTo(map);
+  });
+
+  allData.forEach(row => {
+    const name = row._provider;
+    if (!providers[name]) return;
+    const color = providers[name].color;
+    const m = L.circleMarker([row._lat, row._lng], {
+      radius:5, fillColor:color, color:'rgba(0,0,0,0.3)', weight:1, fillOpacity:0.82
+    });
+    m.bindPopup(buildPopup(row));
+    layerGroups[name].addLayer(m);
+  });
+
+  updateVisibleCount();
+  updateLegend();
+}
+
+function buildPopup(row) {
+  const tn = techName(row._tech);
+  const speed = row._dl ? `${row._dl} / ${row._ul} Mbps` : '';
+  return `
+    <div class="popup-title">${row._provider}</div>
+    <div class="popup-row">Technology: <span>${tn}</span></div>
+    ${row._addr ? `<div class="popup-row">Address: <span>${row._addr}</span></div>` : ''}
+    <div class="popup-row">Coordinates: <span>${row._lat.toFixed(5)}, ${row._lng.toFixed(5)}</span></div>
+    ${speed ? `<div class="popup-row">Speed DL/UL: <span>${speed}</span></div>` : ''}
+    ${row._source ? `<div class="popup-src">Source: ${row._source}</div>` : ''}
+  `;
+}
+
+function updateVisibleCount() {
+  let v = 0;
+  allData.forEach(r => { if (selectedProviders.has(r._provider)) v++; });
+  document.getElementById('visible-count').textContent = v.toLocaleString();
+}
+
+function updateLegend() {
+  const active = [...selectedProviders].filter(p => providers[p]).slice(0, 20);
+  const legend = document.getElementById('map-legend');
+  if (!active.length) { legend.classList.remove('visible'); return; }
+  legend.classList.add('visible');
+  document.getElementById('legend-items').innerHTML = active.map(p =>
+    `<div class="legend-item"><div class="legend-dot" style="background:${providers[p].color}"></div><span>${p.length > 24 ? p.substring(0,24)+'…' : p}</span></div>`
+  ).join('') + (active.length===20 ? `<div class="legend-item" style="color:var(--muted)">…more</div>` : '');
+}
+
+// ── PROVIDER LIST ─────────────────────────────────────────────────────────────
+function renderProviderList() {
+  const list = document.getElementById('provider-list');
+  const names = Object.keys(providers)
+    .filter(n => !searchQuery || n.toLowerCase().includes(searchQuery))
+    .sort((a,b) => providers[b].count - providers[a].count);
+
+  if (!names.length) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">${allData.length?'🔍':'📡'}</div>${allData.length?'No match':'Load data to see providers'}</div>`;
+    return;
+  }
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  list.innerHTML = names.map(name => {
+    const p = providers[name];
+    const on = selectedProviders.has(name);
+    const solo = name === activeProvider && selectedProviders.size === 1;
+    return `<div class="provider-item ${on ? 'active' : ''} ${solo ? 'selected-solo' : ''}" data-prov="${esc(name)}">
+      <div class="prov-dot" style="background:${p.color}${on?'':'55'}"></div>
+      <div class="prov-name" style="color:${on?'var(--text)':'var(--muted)'}">${esc(name)}</div>
+      <div class="prov-count">${p.count.toLocaleString()}</div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('provider-list').addEventListener('click', e => {
+  const item = e.target.closest('.provider-item');
+  if (!item) return;
+  const name = item.dataset.prov;
+  activeProvider = name;
+  if (selectedProviders.has(name)) {
+    selectedProviders.delete(name);
+    layerGroups[name]?.remove();
+  } else {
+    selectedProviders.add(name);
+    if (layerGroups[name]) layerGroups[name].addTo(map);
+  }
+  updateVisibleCount();
+  renderProviderList();
+  updateLegend();
+});
+
+document.getElementById('select-all-btn').addEventListener('click', () => {
+  Object.keys(providers).filter(n => !searchQuery || n.toLowerCase().includes(searchQuery))
+    .forEach(n => { selectedProviders.add(n); if(layerGroups[n]) layerGroups[n].addTo(map); });
+  updateVisibleCount(); renderProviderList(); updateLegend();
+});
+document.getElementById('deselect-all-btn').addEventListener('click', () => {
+  Object.keys(providers).filter(n => !searchQuery || n.toLowerCase().includes(searchQuery))
+    .forEach(n => { selectedProviders.delete(n); layerGroups[n]?.remove(); });
+  updateVisibleCount(); renderProviderList(); updateLegend();
+});
+document.getElementById('solo-btn').addEventListener('click', () => {
+  if (!activeProvider) return;
+  Object.keys(providers).forEach(n => {
+    if (n === activeProvider) { selectedProviders.add(n); if(layerGroups[n]) layerGroups[n].addTo(map); }
+    else { selectedProviders.delete(n); layerGroups[n]?.remove(); }
+  });
+  updateVisibleCount(); renderProviderList(); updateLegend();
+});
+document.getElementById('remove-prov-btn').addEventListener('click', () => {
+  if (!activeProvider || !confirm(`Remove "${activeProvider}"?`)) return;
+  layerGroups[activeProvider]?.remove();
+  delete layerGroups[activeProvider];
+  delete providers[activeProvider];
+  selectedProviders.delete(activeProvider);
+  allData = allData.filter(r => r._provider !== activeProvider);
+  activeProvider = null;
+  renderMarkers(); renderProviderList(); updateStats(); updateLegend();
+});
+document.getElementById('search-input').addEventListener('input', e => {
+  searchQuery = e.target.value.toLowerCase(); renderProviderList();
+});
+
+// ── FCC LIVE API ──────────────────────────────────────────────────────────────
+document.getElementById('query-mode').addEventListener('change', e => {
+  const addr = e.target.value === 'address';
+  document.getElementById('address-fields').style.display = addr ? '' : 'none';
+  document.getElementById('latlng-fields').style.display = addr ? 'none' : '';
+});
+
+async function geocodeAddress(addr) {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'FCC-Fiber-Map/1.0 (educational tool)' } });
+  if (!res.ok) throw new Error(`Geocode HTTP ${res.status}`);
+  const data = await res.json();
+  if (!data.length) throw new Error(`Address not found: "${addr}"`);
+  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display: data[0].display_name };
+}
+
+async function queryFCCAPI(lat, lng) {
+  // FCC National Broadband Map public API
+  const url = `https://broadbandmap.fcc.gov/api/public/map/listAvailability?latitude=${lat.toFixed(6)}&longitude=${lng.toFixed(6)}&unit=0&category=Fixed+Broadband`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`FCC API HTTP ${res.status}`);
+  return await res.json();
+}
+
+function setResult(txt, cls='') {
+  const box = document.getElementById('query-result');
+  box.className = 'query-result-box' + (cls ? ' ' + cls : '');
+  box.textContent = txt;
+}
+
+document.getElementById('run-query-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('run-query-btn');
+  const techFilter = document.getElementById('q-tech').value;
+  const mode = document.getElementById('query-mode').value;
+  btn.disabled = true;
+  setResult('⏳ Querying…');
+
+  try {
+    let lat, lng, label;
+    if (mode === 'address') {
+      const addr = document.getElementById('q-address').value.trim();
+      if (!addr) { setResult('⚠️ Enter an address.', 'qr-warn'); btn.disabled=false; return; }
+      setResult(`📍 Geocoding: "${addr}"…`);
+      const geo = await geocodeAddress(addr);
+      lat=geo.lat; lng=geo.lng; label=addr;
+      setResult(`📍 Geocoded: ${geo.display.substring(0,80)}\n   ${lat.toFixed(5)}, ${lng.toFixed(5)}\n\n⏳ Querying FCC Broadband API…`);
+      map.setView([lat, lng], 14);
+    } else {
+      lat = parseFloat(document.getElementById('q-lat').value);
+      lng = parseFloat(document.getElementById('q-lng').value);
+      if (isNaN(lat)||isNaN(lng)) { setResult('⚠️ Enter valid coordinates.', 'qr-warn'); btn.disabled=false; return; }
+      label = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      map.setView([lat, lng], 14);
+    }
+
+    let data;
+    try {
+      data = await queryFCCAPI(lat, lng);
+    } catch(corsErr) {
+      // CORS / network blocked — show guidance
+      setResult(
+        `⚠️  FCC API blocked by browser CORS policy\n\nThe FCC broadbandmap.fcc.gov server does not send\nAccess-Control-Allow-Origin headers for direct\nbrowser fetch requests.\n\n` +
+        `✅  Your coordinates were geocoded successfully:\n   Lat: ${lat.toFixed(6)}\n   Lng: ${lng.toFixed(6)}\n\n` +
+        `📥  To get data for this location:\n` +
+        `  1. Visit: https://broadbandmap.fcc.gov\n` +
+        `  2. Search for the address on the map\n` +
+        `  3. Download state CSV from the Import tab\n\n` +
+        `🔧  For programmatic access, run this app\n    with a CORS proxy or backend server.\n\n` +
+        `API endpoint that was queried:\n${`https://broadbandmap.fcc.gov/api/public/map/\nlistAvailability?latitude=${lat.toFixed(6)}&longitude=${lng.toFixed(6)}&unit=0&category=Fixed+Broadband`}`,
+        'qr-warn'
+      );
+      updateStatus(`Geocoded OK · FCC API blocked by CORS — see log`, 'warn');
+      // Drop a pin at the geocoded location
+      L.circleMarker([lat,lng], { radius:8, fillColor:'#ffcc00', color:'#000', weight:1, fillOpacity:0.9 })
+        .bindPopup(`<div class="popup-title">📍 Queried Location</div><div class="popup-row">Coords: <span>${lat.toFixed(5)}, ${lng.toFixed(5)}</span></div><div class="popup-src">FCC API blocked by CORS</div>`)
+        .addTo(map).openPopup();
+      btn.disabled = false;
+      return;
+    }
+
+    const results = data.availability || data.results || data.data || data || [];
+    const filtered = techFilter ? results.filter(r => String(r.technology) === techFilter) : results;
+
+    if (!filtered.length) {
+      setResult(`✅ Query complete — no providers at\n   ${label}${techFilter ? '\n   (with technology filter: '+techFilter+')' : ''}\n\nPossible reasons:\n• Location is not a BSL\n• No providers filed for this area\n• Coordinates outside serviceable area`, 'qr-ok');
+      updateStatus(`FCC API: no providers at ${label}`, 'warn');
+    } else {
+      let out = `✅ ${filtered.length} provider record(s) at ${label}\n\n`;
+      filtered.forEach(r => {
+        const prov = r.brand_name || r.dba_name || r.holding_company_name || r.frn || 'Unknown';
+        const tech = techName(r.technology);
+        const dl = r.max_advertised_download_speed || '';
+        const ul = r.max_advertised_upload_speed || '';
+        out += `● ${prov}\n  Tech: ${tech}\n  Speed: ${dl ? dl+'/'+ul+' Mbps' : 'not reported'}\n\n`;
+        addPointToMap(lat, lng, prov, String(r.technology), label, {
+          _dl: dl, _ul: ul, _source: 'FCC Live API',
+          frn: r.frn, low_latency: r.low_latency
+        });
+      });
+      setResult(out.trim(), 'qr-ok');
+      updateStatus(`FCC API: ${filtered.length} providers at ${label}`, 'active');
+    }
+  } catch(e) {
+    setResult(`❌ Error: ${e.message}`, 'qr-err');
+    updateStatus('Query error: ' + e.message, 'warn');
+  }
+  btn.disabled = false;
+});
+
+// ── BATCH MODE ────────────────────────────────────────────────────────────────
+document.getElementById('run-batch-btn').addEventListener('click', async () => {
+  const addresses = document.getElementById('batch-addresses').value
+    .split('\n').map(a => a.trim()).filter(Boolean);
+  if (!addresses.length) return;
+
+  const btn = document.getElementById('run-batch-btn');
+  const techFilter = document.getElementById('q-tech').value;
+  btn.disabled = true;
+  setProgress(0, true);
+
+  let done=0, apiSuccess=0, corsBlocks=0, geoErrors=0;
+  setResult(`⏳ Processing ${addresses.length} addresses…`);
+
+  for (const addr of addresses) {
+    try {
+      const geo = await geocodeAddress(addr);
+      await sleep(1100); // Nominatim: 1 req/sec max
+
+      try {
+        const data = await queryFCCAPI(geo.lat, geo.lng);
+        const results = (data.availability || data.results || data.data || []);
+        const filtered = techFilter ? results.filter(r => String(r.technology) === techFilter) : results;
+        filtered.forEach(r => {
+          const prov = r.brand_name || r.dba_name || r.frn || 'Unknown';
+          addPointToMap(geo.lat, geo.lng, prov, String(r.technology), addr, {
+            _dl: r.max_advertised_download_speed||'', _ul: r.max_advertised_upload_speed||'',
+            _source:'FCC Batch API'
+          });
+        });
+        apiSuccess++;
+      } catch {
+        // CORS — add geocoded pin
+        L.circleMarker([geo.lat,geo.lng], {radius:7,fillColor:'#a78bfa',color:'#000',weight:1,fillOpacity:0.85})
+          .bindPopup(`<div class="popup-title">📍 ${addr}</div><div class="popup-src">CORS-blocked — geocoded only</div>`)
+          .addTo(map);
+        corsBlocks++;
+      }
+    } catch { geoErrors++; }
+
+    done++;
+    setProgress(done / addresses.length * 100);
+    setResult(`⏳ [${done}/${addresses.length}] Processing…\n\n✅ ${apiSuccess} API success · ⚠️ ${corsBlocks} CORS blocks · ❌ ${geoErrors} geo errors`);
+  }
+
+  setProgress(100);
+  setTimeout(() => setProgress(0, false), 1500);
+  setResult(`✅ Batch complete — ${addresses.length} addresses\n${apiSuccess} FCC API success\n${corsBlocks} CORS blocks (geocoded only)\n${geoErrors} geocode errors`, apiSuccess > 0 ? 'qr-ok' : 'qr-warn');
+  updateStatus(`Batch: ${addresses.length} addresses · ${apiSuccess} API · ${corsBlocks} CORS blocks`, apiSuccess > 0 ? 'active' : 'warn');
+  btn.disabled = false;
+});
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function setProgress(pct, show=true) {
+  document.getElementById('progress-wrap').classList.toggle('show', show);
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+
+// ── FILE UPLOAD ───────────────────────────────────────────────────────────────
+const fileInput = document.getElementById('file-input');
+const uploadZone = document.getElementById('upload-zone');
+
+fileInput.addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  updateStatus(`Reading ${f.name}…`, 'warn');
+  const r = new FileReader();
+  r.onload = ev => loadData(ev.target.result, f.name);
+  r.readAsText(f);
+  e.target.value = '';
+});
+['dragover','dragenter'].forEach(ev => uploadZone.addEventListener(ev, e => { e.preventDefault(); uploadZone.classList.add('drag-over'); }));
+['dragleave','dragend'].forEach(ev => uploadZone.addEventListener(ev, () => uploadZone.classList.remove('drag-over')));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) { const r = new FileReader(); r.onload = ev => loadData(ev.target.result, f.name); r.readAsText(f); }
+});
+
+// ── SAMPLE DATA ───────────────────────────────────────────────────────────────
+document.getElementById('sample-btn').addEventListener('click', () => {
+  const provList = [
+    ['AT&T Fiber','50',1000,1000],['Comcast Xfinity','10',1200,35],
+    ['Verizon Fios','50',1000,1000],['Charter Spectrum','10',1000,35],
+    ['Cox Communications','10',1000,35],['Lumen Technologies','50',1000,1000],
+    ['Frontier Fiber','50',2000,2000],['Windstream Kinetic','50',1000,1000],
+    ['Google Fiber','50',2000,2000],['Consolidated Comm.','50',1000,1000],
+  ];
+  const metros = [
+    [40.7128,-74.006],[34.0522,-118.2437],[41.8781,-87.6298],[29.7604,-95.3698],
+    [33.4484,-112.074],[39.9526,-75.1652],[30.2672,-97.7431],[32.7767,-96.797],
+    [37.7749,-122.4194],[47.6062,-122.3321],[42.3601,-71.0589],[36.1745,-115.1372],
+    [25.7617,-80.1918],[45.5051,-122.675],[39.7392,-104.9903],[35.2271,-80.8431],
+  ];
+  const rows = ['brand_name,latitude,longitude,technology,max_advertised_download_speed,max_advertised_upload_speed,low_latency,location_id,address_primary'];
+  let id = 10000;
+  provList.forEach(([name, tech, dl, ul], pi) => {
+    metros.forEach(([lat, lng], mi) => {
+      if ((mi + pi) % 4 === 0) return;
+      const n = 18 + Math.floor(Math.random() * 50);
+      for (let i = 0; i < n; i++) {
+        const dlat = (lat + (Math.random()-0.5)*0.55).toFixed(6);
+        const dlng = (lng + (Math.random()-0.5)*0.55).toFixed(6);
+        rows.push(`${name},${dlat},${dlng},${tech},${dl},${ul},1,FAB${id++},${Math.floor(Math.random()*9999)} Main St`);
+      }
+    });
+  });
+  loadData(rows.join('\n'), 'Demo Data');
+});
+
+document.getElementById('clear-btn').addEventListener('click', () => {
+  if (allData.length && !confirm('Clear all map data?')) return;
+  allData=[]; providers={}; selectedProviders=new Set(); layerGroups={}; activeProvider=null; colorIdx=0;
+  Object.values(layerGroups).forEach(lg => lg.remove());
+  document.getElementById('legend-items').innerHTML='';
+  document.getElementById('map-legend').classList.remove('visible');
+  document.getElementById('provider-list').innerHTML='<div class="empty-state"><div class="icon">📡</div>Load data to see providers</div>';
+  ['total-locations','total-providers','visible-count'].forEach(id => document.getElementById(id).textContent='—');
+  updateStatus('Map cleared','');
+});
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+function updateStats() {
+  document.getElementById('total-locations').textContent = allData.length.toLocaleString();
+  document.getElementById('total-providers').textContent = Object.keys(providers).length.toLocaleString();
+}
+function updateStatus(msg, type) {
+  document.getElementById('status-text').textContent = msg;
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot' + (type==='active' ? ' active' : type==='warn' ? ' warn' : '');
+}
+function showLoading(v, msg='Processing…') {
+  document.getElementById('loading-msg').textContent = msg;
+  document.getElementById('loading').className = 'loading-overlay' + (v ? ' show' : '');
+}
+
+updateStatus('Ready — import FCC CSV or try the Live API tab', '');
+</script>
+</body>
+</html>
